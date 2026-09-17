@@ -1,42 +1,44 @@
-# Turborepo starter with shell commands
+# Repro: `turbo gen` + pnpm 12 → `ERR_PNPM_IGNORED_BUILDS` (esbuild)
 
-This Turborepo starter is maintained by the Turborepo core team. This template is great for issue reproductions and exploring building task graphs without frameworks.
+Minimal reproduction for vercel/turborepo.
 
-## Using this example
+`pnpm turbo gen` installs `@turbo/gen` via an isolated pnpm dlx-style path that does **not** use the workspace `allowBuilds`. Under pnpm 12 (strict dep builds), that fails when `@turbo/gen` pulls `esbuild` (build scripts required). Project-level `allowBuilds: { esbuild: true }` does not help.
 
-Run the following command:
+Bootstrapped with:
 
 ```sh
-npx create-turbo@latest -e with-shell-commands
+npx create-turbo@canary -e with-shell-commands
+```
+(package manager: pnpm)
+
+## Environment
+- `turbo` / `@turbo/gen`: 2.10.14-canary.4
+- `pnpm`: 12.x (**need to manually set** in `package.json` as canary still installs 11.x)
+
+## Setup
+```sh
+pnpm install
+pnpm approve-builds
+```
+(allow `esbuild`)
+
+## Fail (bug)
+```sh
+pnpm turbo gen hello
 ```
 
-### For bug reproductions
+Expected error:
 
-Giving the Turborepo core team a minimal reproduction is the best way to create a tight feedback loop for a bug you'd like to report.
+```sh
+ERR_PNPM_IGNORED_BUILDS
+Ignored build scripts: esbuild@…
+```
 
-Because most monorepos will rely on more tooling than Turborepo (frameworks, linters, formatters, etc.), it's often useful for us to have a reproduction that strips away all of this other tooling so we can focus _only_ on Turborepo's role in your repo. This example does exactly that, giving you a good starting point for creating a reproduction.
+Note: the install uses a dlx cache under `~/Library/Caches/pnpm/dlx/…` (or the OS equivalent), not the workspace `node_modules`.
 
-- Feel free to rename/delete packages for your reproduction so that you can be confident it most closely matches your use case.
-- If you need to use a different package manager to produce your bug, run `pnpm dlx @turbo/workspaces convert` to switch package managers.
-- It's possible that your bug really **does** have to do with the interaction of Turborepo and other tooling within your repository. If you find that your bug does not reproduce in this minimal example and you're confident Turborepo is still at fault, feel free to bring that other tooling into your reproduction.
+## Workaround
+`pnpm --allow-build=esbuild dlx @turbo/gen hello`
 
-## What's inside?
-
-This Turborepo includes the following packages:
-
-### Apps and Packages
-
-- `app-a`: A final package that depends on all other packages in the graph and has no dependents. This could resemble an application in your monorepo that consumes everything in your monorepo through its topological tree.
-- `app-b`: Another final package with many dependencies. No dependents, lots of dependencies.
-- `pkg-a`: A package that defines all of the example's task scripts.
-- `pkg-b`: A package with _almost_ all of the example's task scripts.
-- `tooling-config`: A package to simulate a common configuration used for all of your repository. This could resemble a configuration for tools like TypeScript or ESLint that are installed into all of your packages.
-
-### Some commands to try
-
-Run tasks with the repository's pinned version of `turbo`:
-
-- `pnpm turbo build lint check-types`: Runs all tasks in the default graph.
-- `pnpm turbo build`: A basic command to build `app-a` and `app-b` in parallel.
-- `pnpm turbo build --filter=app-a`: Builds only `app-a` and its dependencies.
-- `pnpm turbo lint`: Runs lints in all packages in parallel.
+## Notes
+- Root `pnpm-workspace.yaml` already has `allowBuilds.esbuild: true`; workspace `pnpm install` succeeds.
+- `pnpm approve-builds` reports nothing pending in the workspace — the failure is only on the isolated gen install path.
